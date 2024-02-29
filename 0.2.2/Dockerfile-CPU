@@ -1,0 +1,29 @@
+FROM distrigroup/ml-workspace:0.1
+
+COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
+
+RUN \
+    pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
+    # Cleanup
+    clean-layer.sh
+
+COPY \
+    resources/docker-entrypoint.py \
+    resources/5xx.html \
+    $RESOURCES_PATH/
+
+COPY resources/branding $RESOURCES_PATH/branding
+
+RUN \
+    # Jupyter Branding
+    cp -f $RESOURCES_PATH/branding/logo.png $CONDA_PYTHON_DIR"/site-packages/notebook/static/base/images/logo.png" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/base/images/favicon.ico" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/favicon.ico" && \
+    # Fielbrowser Branding
+    mkdir -p $RESOURCES_PATH"/filebrowser/img/icons/" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon.ico" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon-32x32.png" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon-16x16.png" && \
+    cp -f $RESOURCES_PATH/branding/ml-workspace-logo.svg $RESOURCES_PATH"/filebrowser/img/logo.svg"
+
+RUN rm -r $RESOURCES_PATH/tutorials/welcome.ipynb
