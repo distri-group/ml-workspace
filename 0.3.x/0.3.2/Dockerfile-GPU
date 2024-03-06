@@ -1,0 +1,181 @@
+ARG ARG_WORKSPACE_BASE_IMAGE="mltooling/ml-workspace:latest"
+
+FROM $ARG_WORKSPACE_BASE_IMAGE
+
+ARG ARG_WORKSPACE_FLAVOR="gpu"
+ENV WORKSPACE_FLAVOR=$ARG_WORKSPACE_FLAVOR
+
+USER root
+
+### NVIDIA CUDA BASE ###
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg2 curl ca-certificates && \
+    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub | apt-key add - && \
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
+    apt-get clean && \
+    rm -rf $HOME/.cache/* && \
+    rm -rf /tmp/* && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CUDA_VERSION 12.1.1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cuda-cudart-12-1=12.1.105-1 \
+    cuda-compat-12-1 \
+    && rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && \
+    rm -rf $HOME/.cache/* && \
+    rm -rf /tmp/* && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf \
+    && echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+ENV PATH /usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
+
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_REQUIRE_CUDA "cuda>=12.1 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526"
+
+### CUDA RUNTIME ###
+ENV NCCL_VERSION 2.17.1-1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cuda-libraries-12-1=12.1.1-1 \
+    libnpp-12-1=12.1.0.40-1 \
+    cuda-nvtx-12-1=12.1.105-1 \
+    libcusparse-12-1=12.1.0.106-1 \
+    libcublas-12-1=12.1.3.1-1 \
+    libnccl2=2.17.1-1+cuda12.1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && rm -rf $HOME/.cache/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-mark hold libcublas-12-1 libnccl2
+
+### CUDA DEVEL ###
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libtinfo5 libncursesw5 \
+    cuda-cudart-dev-12-1=12.1.105-1 \
+    cuda-command-line-tools-12-1=12.1.1-1 \
+    cuda-minimal-build-12-1=12.1.1-1 \
+    cuda-libraries-dev-12-1=12.1.1-1 \
+    cuda-nvml-dev-12-1=12.1.105-1 \
+    libnpp-dev-12-1=12.1.0.40-1 \
+    libcusparse-dev-12-1=12.1.0.106-1 \
+    libcublas-dev-12-1=12.1.3.1-1 \
+    libnccl-dev=2.17.1-1+cuda12.1 && \
+    apt-get clean && \
+    rm -rf $HOME/.cache/* && \
+    rm -rf /tmp/* && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-mark hold libcublas-dev-12-1 libnccl-dev
+ENV LIBRARY_PATH /usr/local/cuda/lib64/stubs
+
+### CUDANN8 DEVEL ###
+ENV NV_CUDNN_VERSION 8.9.0.131
+LABEL com.nvidia.cudnn.version="${NV_CUDNN_VERSION}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcudnn8=$NV_CUDNN_VERSION-1+cuda12.1 \
+    libcudnn8-dev=$NV_CUDNN_VERSION-1+cuda12.1 \
+    && apt-mark hold libcudnn8 && \
+    apt-get clean && \
+    rm -rf /root/.cache/* && \
+    rm -rf /tmp/* && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:/usr/local/cuda/extras/CUPTI/lib64
+
+RUN pip uninstall -y tensorflow tensorflow-cpu intel-tensorflow gpflow spektral tensorflow-text torchtext pytorch-ignite gym tensorflow-metadata
+
+RUN pip uninstall -y google-cloud-storage google-cloud-core google-api-python-client witwidget typing-extensions
+
+RUN pip uninstall -y torch torchvision torchaudio autokeras mdit-py-plugins jupytext tensorboard keras-tuner tensorflow-datasets && \
+    conda remove --force -y pytorch cpuonly
+
+RUN \
+    conda update -n base conda && \
+    conda update -n base -c conda-forge conda
+
+RUN \
+    pip install --upgrade aiohttp && \
+    pip install --upgrade fastai && \
+    pip install --upgrade Jinja2 && \
+    pip install --upgrade scipy && \
+    pip install --upgrade scalene && \
+    pip install --upgrade google-api-core && \
+    pip install --upgrade jaxlib && \
+    pip install --no-cache-dir typing-extensions==4.10.0
+
+RUN \
+    apt-get update && \
+    apt-get install -y libomp-dev libopenblas-base && \
+    conda install nvidia/label/cuda-12.1.1::cuda-toolkit -c pytorch -c nvidia && \
+    pip install torch torchvision torchaudio
+
+RUN \
+    pip install --no-cache-dir cupy-cuda12x && \
+    pip install --no-cache-dir pycuda && \
+    pip install --no-cache-dir gpustat gputil && \
+    pip install --no-cache-dir scikit-cuda
+
+RUN \
+    pip install --no-cache-dir tensorflow && \
+    pip install --no-cache-dir gpflow && \
+    pip install --no-cache-dir spektral && \
+    pip install --no-cache-dir tensorflow-text && \
+    pip install --no-cache-dir torchtext && \
+    pip install --no-cache-dir pytorch-ignite && \
+    pip install --no-cache-dir gym && \
+    pip install --no-cache-dir autokeras && \
+    pip install --no-cache-dir tensorflow-metadata && \
+    pip install --no-cache-dir google-cloud-storage && \
+    pip install --no-cache-dir google-cloud-core && \
+    pip install --no-cache-dir google-api-python-client && \
+    pip install --no-cache-dir witwidget && \
+    pip install --no-cache-dir mdit-py-plugins && \
+    pip install --no-cache-dir jupytext && \
+    pip install --no-cache-dir tensorflow-datasets && \
+    pip install --no-cache-dir tensorboard && \
+    pip install --no-cache-dir keras-tuner && \
+    pip uninstall -y onnxruntime && \
+    pip install --no-cache-dir onnxruntime-gpu onnxruntime-training && \
+    pip uninstall -y mxnet-mkl && \
+    pip install --upgrade jax[cuda12_pip] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
+    pip uninstall -y lightgbm && \
+    pip install lightgbm --config-settings=cmake.define.USE_GPU=ON --config-settings=cmake.define.OpenCL_INCLUDE_DIR="/usr/local/cuda/include/" --config-settings=cmake.define.OpenCL_LIBRARY="/usr/local/cuda/lib64/libOpenCL.so" && \
+    pip install --upgrade --force-reinstall nvidia-ml-py3 && \
+    pip install --no-cache-dir SpeedTorch && \
+    pip install --no-cache-dir ipyexperiments
+
+# Fix for traitlets 5.10.0 bug.
+# juyter notebook version is too low. Require jupyter notebook >= 6.5.6
+RUN \
+    pip uninstall -y traitlets && \
+    pip install --no-cache-dir traitlets==5.9.0 && \
+    clean-layer.sh
+
+ENV TF_FORCE_GPU_ALLOW_GROWTH true
+
+ARG ARG_WORKSPACE_VERSION="latest"
+ENV WORKSPACE_VERSION=$ARG_WORKSPACE_VERSION
+
+# Overwrite & add Labels
+ARG ARG_BUILD_DATE="unknown"
+ARG ARG_VCS_REF="unknown"
+
+LABEL \
+    "workspace.version"=$WORKSPACE_VERSION \
+    "workspace.flavor"=$WORKSPACE_FLAVOR \
+    "workspace.baseimage"=$ARG_WORKSPACE_BASE_IMAGE \
+    "org.opencontainers.image.version"=$WORKSPACE_VERSION \
+    "org.opencontainers.image.revision"=$ARG_VCS_REF \
+    "org.opencontainers.image.created"=$ARG_BUILD_DATE \
+    "org.label-schema.version"=$WORKSPACE_VERSION \
+    "org.label-schema.vcs-ref"=$ARG_VCS_REF \
+    "org.label-schema.build-date"=$ARG_BUILD_DATE
