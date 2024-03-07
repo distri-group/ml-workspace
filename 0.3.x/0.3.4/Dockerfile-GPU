@@ -131,11 +131,11 @@ RUN \
     pip install torch torchvision torchaudio && \
     # Install paddlepaddle
     # https://www.paddlepaddle.org.cn/en/install/quick
-    pip install --upgrade paddlepaddle-gpu==2.6.0.post120 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html && \
+    pip install paddlepaddle-gpu && \
     pip install --upgrade scipy && \
+    pip install --upgrade jax[cuda12_pip] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
     pip install --no-cache-dir cupy-cuda12x && \
     pip install --no-cache-dir onnxruntime-gpu onnxruntime-training && \
-    pip install --upgrade jax[cuda12_pip] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
     pip install --no-cache-dir pycuda && \
     pip install --no-cache-dir gpustat && \
     pip install --no-cache-dir ipyexperiments && \
