@@ -161,21 +161,3 @@ RUN \
     clean-layer.sh
 
 ENV TF_FORCE_GPU_ALLOW_GROWTH true
-
-ARG ARG_WORKSPACE_VERSION="latest"
-ENV WORKSPACE_VERSION=$ARG_WORKSPACE_VERSION
-
-# Overwrite & add Labels
-ARG ARG_BUILD_DATE="unknown"
-ARG ARG_VCS_REF="unknown"
-
-LABEL \
-    "workspace.version"=$WORKSPACE_VERSION \
-    "workspace.flavor"=$WORKSPACE_FLAVOR \
-    "workspace.baseimage"=$ARG_WORKSPACE_BASE_IMAGE \
-    "org.opencontainers.image.version"=$WORKSPACE_VERSION \
-    "org.opencontainers.image.revision"=$ARG_VCS_REF \
-    "org.opencontainers.image.created"=$ARG_BUILD_DATE \
-    "org.label-schema.version"=$WORKSPACE_VERSION \
-    "org.label-schema.vcs-ref"=$ARG_VCS_REF \
-    "org.label-schema.build-date"=$ARG_BUILD_DATE
