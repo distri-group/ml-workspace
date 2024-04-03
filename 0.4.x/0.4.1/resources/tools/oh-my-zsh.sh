@@ -29,7 +29,7 @@ if ! hash zsh 2>/dev/null; then
     apt-get install -y --no-install-recommends autojump git-flow git-extras ncdu htop
     pip install Pygments ranger-fm thefuck bpytop
     # Install fkill-cli: (too big - 30MB) npm install --global fkill-cli && \
-    yes | sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+    yes | sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     # Install powerlevel10k for instant prompt
     # git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     # https://www.reddit.com/r/zsh/comments/dht4zt/make_zsh_start_instantly_with_this_one_weird_trick/
