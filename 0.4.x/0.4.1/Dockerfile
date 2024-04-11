@@ -200,6 +200,7 @@ RUN \
 RUN wget --no-verbose https://github.com/krallin/tini/releases/download/v0.19.0/tini -O /tini && \
     chmod +x /tini
 
+# debug : 在安装SSH后，之后设置的所有环境变量都会失效，应该需要配置SSH，之后关注下
 # prepare ssh for inter-container communication for remote python kernel
 RUN \
     apt-get update && \
@@ -223,6 +224,37 @@ RUN \
     fix-permissions.sh $HOME && \
     # Cleanup
     clean-layer.sh
+
+RUN \
+    OPEN_RESTY_VERSION="1.25.3.1" && \
+    mkdir $RESOURCES_PATH"/openresty" && \
+    cd $RESOURCES_PATH"/openresty" && \
+    apt-get update && \
+    apt-get purge -y nginx nginx-common && \
+    # libpcre required, otherwise you get a 'the HTTP rewrite module requires the PCRE library' error
+    # Install apache2-utils to generate user:password file for nginx.
+    apt-get install -y libssl-dev perl libpcre3 libpcre3-dev apache2-utils && \
+    wget --no-verbose https://openresty.org/download/openresty-$OPEN_RESTY_VERSION.tar.gz  -O ./openresty.tar.gz && \
+    tar xfz ./openresty.tar.gz && \
+    rm ./openresty.tar.gz && \
+    cd ./openresty-$OPEN_RESTY_VERSION/ && \
+    # Surpress output - if there is a problem remove  > /dev/null
+    ./configure --with-http_stub_status_module --with-http_sub_module > /dev/null && \
+    make -j2 > /dev/null && \
+    make install > /dev/null && \
+    # create log dir and file - otherwise openresty will throw an error
+    mkdir -p /var/log/nginx/ && \
+    touch /var/log/nginx/upstream.log && \
+    cd $RESOURCES_PATH && \
+    rm -r $RESOURCES_PATH"/openresty" && \
+    # Fix permissions
+    chmod -R a+rwx $RESOURCES_PATH && \
+    # Cleanup
+    clean-layer.sh
+
+ENV PATH=/usr/local/openresty/nginx/sbin:$PATH
+
+COPY resources/nginx/lua-extensions /etc/nginx/nginx_plugins
 
 ### END BASICS ###
 
@@ -269,11 +301,33 @@ RUN wget --no-verbose https://repo.anaconda.com/miniconda/Miniconda3-py310_${CON
     $CONDA_ROOT/bin/conda clean -y --packages && \
     $CONDA_ROOT/bin/conda clean -y -a -f  && \
     $CONDA_ROOT/bin/conda build purge-all && \
+    echo "${CONDA_ROOT}/lib" >> /etc/ld.so.conf && \
+    ldconfig && \
     # Fix permissions
     fix-permissions.sh $CONDA_ROOT && \
     clean-layer.sh
 
 ENV PATH=$CONDA_ROOT/bin:$PATH
+
+# Will throw an error: OpenSSL version mismatch problem
+# ENV LD_LIBRARY_PATH=$CONDA_ROOT/lib
+
+# Install pyenv to allow dynamic creation of python versions
+RUN git clone https://github.com/pyenv/pyenv.git $RESOURCES_PATH/.pyenv && \
+    # Install pyenv plugins based on pyenv installer
+    git clone https://github.com/pyenv/pyenv-virtualenv.git $RESOURCES_PATH/.pyenv/plugins/pyenv-virtualenv  && \
+    git clone https://github.com/pyenv/pyenv-doctor.git $RESOURCES_PATH/.pyenv/plugins/pyenv-doctor && \
+    git clone https://github.com/pyenv/pyenv-update.git $RESOURCES_PATH/.pyenv/plugins/pyenv-update && \
+    git clone https://github.com/pyenv/pyenv-which-ext.git $RESOURCES_PATH/.pyenv/plugins/pyenv-which-ext && \
+    apt-get update && \
+    # TODO: lib might contain high vulnerability
+    # Required by pyenv
+    apt-get install -y --no-install-recommends libffi-dev && \
+    clean-layer.sh
+
+# Add pyenv to path
+ENV PYENV_ROOT ${RESOURCES_PATH}/.pyenv
+ENV PATH ${PYENV_ROOT}/bin:${PATH}
 
 # Install pipx
 RUN python -m pip install pipx && \
@@ -281,9 +335,47 @@ RUN python -m pip install pipx && \
     clean-layer.sh
 ENV PATH=$HOME/.local/bin:$PATH
 
+# Install node.js
+RUN \
+    apt-get update && \
+    # https://nodejs.org/en/about/releases/ use even numbered releases, i.e. LTS versions
+    curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
+    apt-get install -y nodejs && \
+    # As conda is first in path, the commands 'node' and 'npm' reference to the version of conda.
+    # Replace those versions with the newly installed versions of node
+    rm -f /opt/conda/bin/node && ln -s /usr/bin/node /opt/conda/bin/node && \
+    rm -f /opt/conda/bin/npm && ln -s /usr/bin/npm /opt/conda/bin/npm && \
+    # Fix permissions
+    chmod a+rwx /usr/bin/node && \
+    chmod a+rwx /usr/bin/npm && \
+    # Fix node versions - put into own dir and before conda:
+    mkdir -p /opt/node/bin && \
+    ln -s /usr/bin/node /opt/node/bin/node && \
+    ln -s /usr/bin/npm /opt/node/bin/npm && \
+    # Update npm
+    /usr/bin/npm install -g npm && \
+    # Install Yarn
+    /usr/bin/npm install -g yarn && \
+    # Install typescript
+    /usr/bin/npm install -g typescript && \
+    # Install webpack - 32 MB
+    /usr/bin/npm install -g webpack && \
+    # Install node-gyp
+    /usr/bin/npm install -g node-gyp && \
+    # Update all packages to latest version
+    /usr/bin/npm update -g && \
+    # Cleanup
+    clean-layer.sh
+
+ENV PATH=/opt/node/bin:$PATH
+
+# Java - removed
+
 ### END RUNTIMES ###
 
 ### PROCESS TOOLS ###
+
+# Removed XRDP
 
 # Install supervisor for process supervision
 RUN \
@@ -300,6 +392,114 @@ RUN \
     clean-layer.sh
 
 ### END PROCESS TOOLS ###
+
+### GUI TOOLS ###
+
+# Install xfce4 & gui tools
+RUN \
+    # Use staging channel to get newest xfce4 version (4.16)
+    add-apt-repository -y ppa:xubuntu-dev/staging && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends xfce4 && \
+    apt-get install -y --no-install-recommends gconf2 && \
+    apt-get install -y --no-install-recommends xfce4-terminal && \
+    apt-get install -y --no-install-recommends xfce4-clipman && \
+    apt-get install -y --no-install-recommends xterm && \
+    apt-get install -y --no-install-recommends --allow-unauthenticated xfce4-taskmanager  && \
+    # Install dependencies to enable vncserver
+    apt-get install -y --no-install-recommends xauth xinit dbus-x11 && \
+    # Install gdebi deb installer
+    apt-get install -y --no-install-recommends gdebi && \
+    # Search for files
+    apt-get install -y --no-install-recommends catfish && \
+    apt-get install -y --no-install-recommends font-manager && \
+    # vs support for thunar
+    apt-get install -y thunar-vcs-plugin && \
+    # Streaming text editor for large files - klogg is alternative to glogg
+    apt-get install -y --no-install-recommends libqt5concurrent5 libqt5widgets5 libqt5xml5 && \
+    wget --no-verbose https://github.com/variar/klogg/releases/download/v22.06/klogg-22.06.0.1289-Linux-amd64-jammy.deb -O $RESOURCES_PATH/klogg.deb && \
+    dpkg -i $RESOURCES_PATH/klogg.deb && \
+    rm $RESOURCES_PATH/klogg.deb && \
+    # Disk Usage Visualizer
+    apt-get install -y --no-install-recommends baobab && \
+    # Lightweight text editor
+    apt-get install -y --no-install-recommends mousepad && \
+    apt-get install -y --no-install-recommends vim && \
+    # Process monitoring
+    apt-get install -y --no-install-recommends htop && \
+    # Install Archive/Compression Tools: https://wiki.ubuntuusers.de/Archivmanager/
+    apt-get install -y p7zip p7zip-rar && \
+    apt-get install -y --no-install-recommends thunar-archive-plugin && \
+    apt-get install -y xarchiver && \
+    # DB Utils
+    apt-get install -y --no-install-recommends sqlitebrowser && \
+    # Install nautilus and support for sftp mounting
+    apt-get install -y --no-install-recommends nautilus gvfs-backends && \
+    # Install gigolo - Access remote systems
+    apt-get install -y --no-install-recommends gigolo libglib2.0-bin && \
+    # xfce systemload panel plugin - needs to be activated
+    # apt-get install -y --no-install-recommends xfce4-systemload-plugin && \
+    # Leightweight ftp client that supports sftp, http, ...
+    apt-get install -y --no-install-recommends gftp && \
+    # Install chrome
+    # sudo add-apt-repository ppa:system76/pop
+    add-apt-repository ppa:saiarcot895/chromium-beta && \
+    apt-get update && \
+    apt-get install -y chromium-browser chromium-browser-l10n chromium-codecs-ffmpeg && \
+    ln -s /usr/bin/chromium-browser /usr/bin/google-chrome && \
+    # Cleanup
+    apt-get purge -y pm-utils xscreensaver* && \
+    # Large package: gnome-user-guide 50MB app-install-data 50MB
+    apt-get remove -y app-install-data gnome-user-guide && \
+    clean-layer.sh
+
+RUN echo "/lib/x86_64-linux-gnu" >> /etc/ld.so.conf && \
+    echo "/usr/lib/x86_64-linux-gnu" >> /etc/ld.so.conf && \
+    ldconfig
+
+# Install VNC
+RUN \
+    apt-get update  && \
+    # required for websockify
+    # apt-get install -y python-numpy  && \
+    cd ${RESOURCES_PATH} && \
+    # Tiger VNC
+    wget -qO- https://sourceforge.net/projects/tigervnc/files/stable/1.13.1/tigervnc-1.13.1.x86_64.tar.gz/download | tar xz --strip 1 -C / && \
+    # Install websockify
+    mkdir -p ./novnc/utils/websockify && \
+    # debug : 原版是1.2.0，解压后是launch.sh，而1.4.0解压后是novnc_proxy，之后关注下是否会有VNC启动问题
+    wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz --strip 1 -C ./novnc && \
+    wget -qO- https://github.com/novnc/websockify/archive/v0.11.0.tar.gz | tar xz --strip 1 -C ./novnc/utils/websockify && \
+    chmod +x -v ./novnc/utils/novnc_proxy && \
+    # create user vnc directory
+    mkdir -p $HOME/.vnc && \
+    # Fix permissions
+    fix-permissions.sh ${RESOURCES_PATH} && \
+    # Cleanup
+    clean-layer.sh
+
+# Install Web Tools - Offered via Jupyter Tooling Plugin
+
+## VS Code Server: https://github.com/coder/code-server
+COPY resources/tools/vs-code-server.sh $RESOURCES_PATH/tools/vs-code-server.sh
+RUN \
+    /bin/bash $RESOURCES_PATH/tools/vs-code-server.sh --install && \
+    # Cleanup
+    clean-layer.sh
+
+## ungit
+COPY resources/tools/ungit.sh $RESOURCES_PATH/tools/ungit.sh
+RUN \
+    /bin/bash $RESOURCES_PATH/tools/ungit.sh --install && \
+    # Cleanup
+    clean-layer.sh
+
+## netdata
+COPY resources/tools/netdata.sh $RESOURCES_PATH/tools/netdata.sh
+RUN \
+    /bin/bash $RESOURCES_PATH/tools/netdata.sh --install && \
+    # Cleanup
+    clean-layer.sh
 
 ### JUPYTER ###
 
@@ -321,6 +521,10 @@ RUN \
     clean-layer.sh
 
 ### END JUPYTER ###
+
+### CONFIGURATION ###
+
+### END CONFIGURATION ###
 
 # debug
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
