@@ -501,7 +501,104 @@ RUN \
     # Cleanup
     clean-layer.sh
 
+## Glances webtool is installed in python section below via requirements.txt
+
+## Filebrowser
+COPY resources/tools/filebrowser.sh $RESOURCES_PATH/tools/filebrowser.sh
+RUN \
+    /bin/bash $RESOURCES_PATH/tools/filebrowser.sh --install && \
+    # Cleanup
+    clean-layer.sh
+
+ARG ARG_WORKSPACE_FLAVOR="full"
+ENV WORKSPACE_FLAVOR=$ARG_WORKSPACE_FLAVOR
+
+## No need to install ##
+# Install Visual Studio Code
+# Install Firefox
+
+### END GUI TOOLS ###
+
+### DATA SCIENCE BASICS ###
+
+## Python 3
+# Data science libraries requirements
+COPY resources/libraries ${RESOURCES_PATH}/libraries
+
+### Install main data science libs
+RUN \
+    ln -s -f $CONDA_ROOT/bin/python /usr/bin/python && \
+    apt-get update && \
+    # upgrade pip
+    pip install --upgrade pip && \
+    conda install -y --update-all 'python='$PYTHON_VERSION mkl-service mkl && \
+    # Install some basics - required to run container
+    conda install -y --update-all \
+    'python='$PYTHON_VERSION \
+    'ipython=8.20.*' \
+    'notebook=7.1.*' \
+    'jupyterlab=4.1.*' \
+    'nbconvert=7.16.*' \
+    'yarl==1.9.*' \
+    'scipy==1.13.*' \
+    'numpy==1.26.*' \
+    scikit-learn \
+    numexpr && \
+    # Switch of channel priority, makes some trouble
+    # debug: 暂时先注释掉，出现问题再来看
+    # conda config --system --set channel_priority false && \
+    # Install minimal pip requirements
+    # debug: 这里仅安装了minimal的requirements，后续需要根据实际情况来安装
+    pip install --no-cache-dir --upgrade --upgrade-strategy only-if-needed -r ${RESOURCES_PATH}/libraries/requirements-minimal.txt && \
+    # Fix permissions
+    fix-permissions.sh $CONDA_ROOT && \
+    # Cleanup
+    clean-layer.sh
+
+# Fix conda version
+RUN \
+    # Conda installs wrong node version - relink conda node to the actual node
+    rm -f /opt/conda/bin/node && ln -s /usr/bin/node /opt/conda/bin/node && \
+    rm -f /opt/conda/bin/npm && ln -s /usr/bin/npm /opt/conda/bin/npm
+
+### END DATA SCIENCE BASICS ###
+
 ### JUPYTER ###
+
+COPY \
+    resources/jupyter/start.sh \
+    resources/jupyter/start-notebook.sh \
+    resources/jupyter/start-singleuser.sh \
+    /usr/local/bin/
+
+# Configure Jupyter / JupyterLab
+# Add as jupyter system configuration
+COPY resources/jupyter/nbconfig /etc/jupyter/nbconfig
+COPY resources/jupyter/jupyter_notebook_config.json /etc/jupyter/
+
+# install jupyter extensions
+RUN \
+    # Create empty notebook configuration
+    mkdir -p $HOME/.jupyter/nbconfig/ && \
+    printf "{\"load_extensions\": {}}" > $HOME/.jupyter/nbconfig/notebook.json && \
+    # The installed version of Jupyter Notebook cannot start the extension because it is incompatible and needs to be lowered.
+    pip install --no-cache-dir --upgrade notebook==6.4.12 && \
+    # Activate and configure extensions
+    jupyter contrib nbextension install --sys-prefix && \
+    # nbextensions configurator
+    jupyter nbextensions_configurator enable --sys-prefix && \
+    # Configure nbdime
+    nbdime config-git --enable --global && \
+    # Activate Jupytext
+    jupyter nbextension enable --py jupytext --sys-prefix && \
+    # debug: 原版这里安装一些第三方插件，后续根据实际情况来安装
+    # Install and activate Jupyter Tensorboard
+    pip install --no-cache-dir --upgrade tensorflow==2.16.1 && \
+    pip install --no-cache-dir --upgrade jupyter-tensorboard==0.2.0 && \
+    jupyter tensorboard enable --sys-prefix && \
+    # debug: 原版这里有配置to2的命令，因为没有安装，所以暂时注释掉
+    # debug: 原版minimal这里就结束了
+    clean-layer.sh
 
 # Install and activate ZSH
 COPY resources/tools/oh-my-zsh.sh $RESOURCES_PATH/tools/oh-my-zsh.sh
@@ -528,6 +625,7 @@ RUN \
 
 # debug
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+RUN echo 'root:KKhH7V2b' | chpasswd
 
 ENTRYPOINT ["/tini", "-g", "--"]
 
