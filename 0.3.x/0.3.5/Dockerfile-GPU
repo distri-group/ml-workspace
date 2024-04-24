@@ -1,0 +1,23 @@
+ARG ARG_WORKSPACE_BASE_IMAGE="distrigroup/ml-workspace-gpu:0.3.4"
+
+FROM $ARG_WORKSPACE_BASE_IMAGE
+
+COPY resources/tutorials/welcome-v2.2.ipynb $RESOURCES_PATH/tutorials/
+
+### INSTALL MACHINE LEARNING PACKAGE ###
+
+# The following packages will be downgraded
+RUN \
+    pip install --upgrade protobuf==3.20.3 && \
+    pip install --upgrade numpy==1.23.5 && \
+    clean-layer.sh
+
+RUN \
+    pip install --no-cache-dir lightning==2.2.3 && \
+    pip install --no-cache-dir keras==2.15.0 && \
+    pip install --no-cache-dir transformers==4.40.1 && \
+    pip install --no-cache-dir timm==0.9.16 && \
+    pip install --no-cache-dir diffusers[torch]==0.27.2 && \
+    pip install --no-cache-dir datasets==2.19.0 && \
+    clean-layer.sh
+### END INSTALL MACHINE LEARNING PACKAGE ###
