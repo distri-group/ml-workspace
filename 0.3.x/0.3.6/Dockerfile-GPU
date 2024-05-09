@@ -1,0 +1,10 @@
+ARG ARG_WORKSPACE_BASE_IMAGE="distrigroup/ml-workspace-gpu:0.3.5"
+
+FROM $ARG_WORKSPACE_BASE_IMAGE
+
+COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
+
+RUN \
+    pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
+    # Cleanup
+    clean-layer.sh

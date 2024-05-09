@@ -595,10 +595,54 @@ RUN \
     # Install and activate Jupyter Tensorboard
     pip install --no-cache-dir --upgrade tensorflow==2.16.1 && \
     pip install --no-cache-dir --upgrade jupyter-tensorboard==0.2.0 && \
+    # 
+    pip install --no-cache-dir --upgrade traitlets==5.9.0 && \
+    pip install --no-cache-dir --upgrade jupyter-server==1.24.0 && \
     jupyter tensorboard enable --sys-prefix && \
     # debug: 原版这里有配置to2的命令，因为没有安装，所以暂时注释掉
     # debug: 原版minimal这里就结束了
     clean-layer.sh
+
+# install jupyterlab
+RUN \
+    # without es6-promise some extension builds fail
+    npm install -g es6-promise && \
+    # define alias command for jupyterlab extension installs with log prints to stdout
+    jupyter lab build && \
+    # Install JupyterLab extensions
+    # Installing extensions with the jupyter labextension install command is deprecated, should manage prebuilt extensions with package managers like pip and conda
+    pip install --no-cache-dir --upgrade jupyterlab-widgets==3.0.10 && \
+    # debug: 原版minimal这里就结束了
+    pip install --no-cache-dir --upgrade jupyterlabcodetoc==4.0.1 && \
+    pip install --no-cache-dir --upgrade jupyterlab-tensorboard-pro==4.0.0 && \
+    # install jupyterlab git
+    pip install --no-cache-dir --upgrade jupyterlab-git==0.50.0 && \
+    # Install jupyterlab language server support
+    pip install --no-cache-dir --upgrade jupyterlab-lsp==5.1.0 jupyter-lsp==2.2.5 && \
+    pip install --no-cache-dir --upgrade jupyterlab-spreadsheet-editor==0.7.1 && \
+    # Install jupyterlab variable inspector
+    pip install --no-cache-dir --upgrade lckr-jupyterlab-variableinspector==3.2.1 && \
+    # Install jupyterlab code formattor - https://github.com/ryantam626/jupyterlab_code_formatter
+    pip install --no-cache-dir --upgrade jupyterlab-code-formatter==2.2.1 && \
+    jupyter server extension enable --py jupyterlab_code_formatter --sys-prefix && \
+    # Final build with minimization
+    jupyter lab build -y --debug-log-path=/dev/stdout --log-level=WARN && \
+    jupyter lab build && \
+    # Cleanup
+    # Clean jupyter lab cache: https://github.com/jupyterlab/jupyterlab/issues/4930
+    jupyter lab clean && \
+    rm -rf $CONDA_ROOT/share/jupyter/lab/staging && \
+    clean-layer.sh
+
+# Install Jupyter Tooling Extension
+COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
+
+RUN \
+    pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
+    # Cleanup
+    clean-layer.sh
+
+### END JUPYTER ###
 
 # Install and activate ZSH
 COPY resources/tools/oh-my-zsh.sh $RESOURCES_PATH/tools/oh-my-zsh.sh
@@ -617,17 +661,314 @@ RUN \
     # Cleanup
     clean-layer.sh
 
-### END JUPYTER ###
+# Install Git LFS
+COPY resources/tools/git-lfs.sh $RESOURCES_PATH/tools/git-lfs.sh
+
+RUN \
+    /bin/bash $RESOURCES_PATH/tools/git-lfs.sh --install && \
+    # Cleanup
+    clean-layer.sh
+
+### VSCODE ###
+
+# Install vscode extension
+RUN \
+    SLEEP_TIMER=25 && \
+    # debug: 原版minimal这里就结束了
+    cd $RESOURCES_PATH && \
+    mkdir -p $HOME/.vscode/extensions/ && \
+    # Install vs code jupyter - required by python extension
+    VS_JUPYTER_VERSION="2023.9.100" && \
+    wget --retry-on-http-error=429 --waitretry 15 --tries 5 --no-verbose https://open-vsx.org/api/ms-toolsai/jupyter/$VS_JUPYTER_VERSION/file/ms-toolsai.jupyter-$VS_JUPYTER_VERSION.vsix -O ms-toolsai.jupyter-$VS_JUPYTER_VERSION.vsix && \
+    bsdtar -xf ms-toolsai.jupyter-$VS_JUPYTER_VERSION.vsix extension && \
+    rm ms-toolsai.jupyter-$VS_JUPYTER_VERSION.vsix && \
+    mv extension $HOME/.vscode/extensions/ms-toolsai.jupyter-$VS_JUPYTER_VERSION && \
+    sleep $SLEEP_TIMER && \
+    # Install python extension
+    VS_PYTHON_VERSION="2024.4.1" && \
+    wget --no-verbose https://open-vsx.org/api/ms-python/python/$VS_PYTHON_VERSION/file/ms-python.python-$VS_PYTHON_VERSION.vsix && \
+    bsdtar -xf ms-python.python-$VS_PYTHON_VERSION.vsix extension && \
+    rm ms-python.python-$VS_PYTHON_VERSION.vsix && \
+    mv extension $HOME/.vscode/extensions/ms-python.python-$VS_PYTHON_VERSION && \
+    sleep $SLEEP_TIMER && \
+    # debug: 原版light这里就结束了
+    # Install prettie
+    PRETTIER_VERSION="10.4.0" && \
+    wget --no-verbose https://open-vsx.org/api/esbenp/prettier-vscode/$PRETTIER_VERSION/file/esbenp.prettier-vscode-$PRETTIER_VERSION.vsix && \
+    bsdtar -xf esbenp.prettier-vscode-$PRETTIER_VERSION.vsix extension && \
+    rm esbenp.prettier-vscode-$PRETTIER_VERSION.vsix && \
+    mv extension $HOME/.vscode/extensions/prettier-vscode-$PRETTIER_VERSION.vsix && \
+    sleep $SLEEP_TIMER && \
+    # Install code runner
+    VS_CODE_RUNNER_VERSION="0.12.2" && \
+    wget --no-verbose https://open-vsx.org/api/formulahendry/code-runner/$VS_CODE_RUNNER_VERSION/file/formulahendry.code-runner-$VS_CODE_RUNNER_VERSION.vsix && \
+    bsdtar -xf formulahendry.code-runner-$VS_CODE_RUNNER_VERSION.vsix extension && \
+    rm formulahendry.code-runner-$VS_CODE_RUNNER_VERSION.vsix && \
+    mv extension $HOME/.vscode/extensions/code-runner-$VS_CODE_RUNNER_VERSION && \
+    sleep $SLEEP_TIMER && \
+    # Install ESLint extension
+    VS_ESLINT_VERSION="2.4.4" && \
+    wget --retry-on-http-error=429 --waitretry 15 --tries 5 --no-verbose https://open-vsx.org/api/dbaeumer/vscode-eslint/$VS_ESLINT_VERSION/file/dbaeumer.vscode-eslint-$VS_ESLINT_VERSION.vsix -O dbaeumer.vscode-eslint.vsix && \
+    bsdtar -xf dbaeumer.vscode-eslint.vsix extension && \
+    rm dbaeumer.vscode-eslint.vsix && \
+    mv extension $HOME/.vscode/extensions/dbaeumer.vscode-eslint-$VS_ESLINT_VERSION.vsix && \
+    sleep $SLEEP_TIMER && \
+    fix-permissions.sh $HOME/.vscode/extensions/ && \
+    clean-layer.sh
+
+### END VSCODE ###
+
+### INCUBATION ZONE ###
+
+RUN \
+    apt-get update && \
+    # Cleanup
+    clean-layer.sh
+
+### END INCUBATION ZONE ###
 
 ### CONFIGURATION ###
 
+### debug: 以下代码未验证 ###
+# Copy files into workspace
+COPY \
+    resources/docker-entrypoint.py \
+    resources/5xx.html \
+    $RESOURCES_PATH/
+
+# Copy scripts into workspace
+COPY resources/scripts $RESOURCES_PATH/scripts
+
+# Create Desktop Icons for Tooling
+COPY resources/branding $RESOURCES_PATH/branding
+
+# Configure Home folder (e.g. xfce)
+COPY resources/home/ $HOME/
+
+# Copy some configuration files
+COPY resources/ssh/ssh_config resources/ssh/sshd_config  /etc/ssh/
+COPY resources/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY resources/config/xrdp.ini /etc/xrdp/xrdp.ini
+
+# Configure supervisor process
+COPY resources/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+# Copy all supervisor program definitions into workspace
+COPY resources/supervisor/programs/ /etc/supervisor/conf.d/
+
+# Assume yes to all apt commands, to avoid user confusion around stdin.
+COPY resources/config/90assumeyes /etc/apt/apt.conf.d/
+
+# Monkey Patching novnc: Styling and added clipboard support. All changed sections are marked with CUSTOM CODE
+COPY resources/novnc/ $RESOURCES_PATH/novnc/
+
+RUN \
+    ## create index.html to forward automatically to `vnc.html`
+    # Needs to be run after patching
+    ln -s $RESOURCES_PATH/novnc/vnc.html $RESOURCES_PATH/novnc/index.html
+
+# Basic VNC Settings - no password
+ENV \
+    VNC_PW=vncpassword \
+    VNC_RESOLUTION=1600x900 \
+    VNC_COL_DEPTH=24
+
+# Add tensorboard patch - use tensorboard jupyter plugin instead of the actual tensorboard magic
+COPY resources/jupyter/tensorboard_notebook_patch.py $CONDA_PYTHON_DIR/site-packages/tensorboard/notebook.py
+
+# Additional jupyter configuration
+COPY resources/jupyter/jupyter_notebook_config.py /etc/jupyter/
+COPY resources/jupyter/sidebar.jupyterlab-settings $HOME/.jupyter/lab/user-settings/@jupyterlab/application-extension/
+COPY resources/jupyter/plugin.jupyterlab-settings $HOME/.jupyter/lab/user-settings/@jupyterlab/extensionmanager-extension/
+COPY resources/jupyter/ipython_config.py /etc/ipython/ipython_config.py
+
+# Branding of various components
+RUN \
+    # Jupyter Branding
+    cp -f $RESOURCES_PATH/branding/logo.png $CONDA_PYTHON_DIR"/site-packages/notebook/static/base/images/logo.png" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/base/images/favicon.ico" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/favicon.ico" && \
+    # Fielbrowser Branding
+    mkdir -p $RESOURCES_PATH"/filebrowser/img/icons/" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon.ico" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon-32x32.png" && \
+    cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon-16x16.png" && \
+    cp -f $RESOURCES_PATH/branding/ml-workspace-logo.svg $RESOURCES_PATH"/filebrowser/img/logo.svg"
+
+# Configure git
+RUN \
+    git config --global core.fileMode false && \
+    git config --global http.sslVerify false && \
+    # Use store or credentialstore instead? timout == 365 days validity
+    git config --global credential.helper 'cache --timeout=31540000'
+
+# Configure netdata
+COPY resources/netdata/ /etc/netdata/
+COPY resources/netdata/cloud.conf /var/lib/netdata/cloud.d/cloud.conf
+
+# Configure Matplotlib
+RUN \
+    # Import matplotlib the first time to build the font cache.
+    MPLBACKEND=Agg python -c "import matplotlib.pyplot" \
+    # Stop Matplotlib printing junk to the console on first load
+    sed -i "s/^.*Matplotlib is building the font cache using fc-list.*$/# Warning removed/g" $CONDA_PYTHON_DIR/site-packages/matplotlib/font_manager.py
+
+# Create Desktop Icons for Tooling
+COPY resources/icons $RESOURCES_PATH/icons
+
+RUN \
+    # ungit:
+    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Ungit\nComment=Git Client\nCategories=Development;\nIcon=/resources/icons/ungit-icon.png\nURL=http://localhost:8092/tools/ungit" > /usr/share/applications/ungit.desktop && \
+    chmod +x /usr/share/applications/ungit.desktop && \
+    # netdata:
+    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Netdata\nComment=Hardware Monitoring\nCategories=System;Utility;Development;\nIcon=/resources/icons/netdata-icon.png\nURL=http://localhost:8092/tools/netdata" > /usr/share/applications/netdata.desktop && \
+    chmod +x /usr/share/applications/netdata.desktop && \
+    # glances:
+    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Glances\nComment=Hardware Monitoring\nCategories=System;Utility;\nIcon=/resources/icons/glances-icon.png\nURL=http://localhost:8092/tools/glances" > /usr/share/applications/glances.desktop && \
+    chmod +x /usr/share/applications/glances.desktop && \
+    # Remove mail and logout desktop icons
+    rm /usr/share/applications/xfce4-mail-reader.desktop && \
+    rm /usr/share/applications/xfce4-session-logout.desktop
+
+# Copy resources into workspace
+COPY resources/tools $RESOURCES_PATH/tools
+COPY resources/tests $RESOURCES_PATH/tests
+COPY resources/tutorials $RESOURCES_PATH/tutorials
+COPY resources/licenses $RESOURCES_PATH/licenses
+COPY resources/reports $RESOURCES_PATH/reports
+
+# Various configurations
+RUN \
+    touch $HOME/.ssh/config && \
+    # clear chome init file - not needed since we load settings manually
+    chmod -R a+rwx $WORKSPACE_HOME && \
+    chmod -R a+rwx $RESOURCES_PATH && \
+    # make all desktop launchers executable
+    chmod -R a+rwx /usr/share/applications/ && \
+    ln -s $RESOURCES_PATH/tools/ $HOME/Desktop/Tools && \
+    ln -s $WORKSPACE_HOME $HOME/Desktop/workspace && \
+    chmod a+rwx /usr/local/bin/start-notebook.sh && \
+    chmod a+rwx /usr/local/bin/start.sh && \
+    chmod a+rwx /usr/local/bin/start-singleuser.sh && \
+    chown root:root /tmp && \
+    chmod 1777 /tmp && \
+    # TODO: does 1777 work fine? chmod a+rwx /tmp && \
+    # Set /workspace as default directory to navigate to as root user
+    echo 'cd '$WORKSPACE_HOME >> $HOME/.bashrc
+
+# MKL and Hardware Optimization
+ENV KMP_DUPLICATE_LIB_OK="True" \
+    # Control how to bind OpenMP* threads to physical processing units # verbose
+    KMP_AFFINITY="granularity=fine,compact,1,0" \
+    KMP_BLOCKTIME=0 \
+    # KMP_BLOCKTIME="1" -> is not faster in my tests
+    # TensorFlow uses less than half the RAM with tcmalloc relative to the default. - requires google-perftools
+    # Too many issues: LD_PRELOAD="/usr/lib/libtcmalloc.so.4" \
+    # TODO set PYTHONDONTWRITEBYTECODE
+    # TODO set XDG_CONFIG_HOME, CLICOLOR?
+    # https://software.intel.com/en-us/articles/getting-started-with-intel-optimization-for-mxnet
+    # KMP_AFFINITY=granularity=fine, noduplicates,compact,1,0
+    # MXNET_SUBGRAPH_BACKEND=MKLDNN
+    # TODO: check https://github.com/oneapi-src/oneTBB/issues/190
+    # TODO: https://github.com/pytorch/pytorch/issues/37377
+    # use omp
+    MKL_THREADING_LAYER=GNU \
+    # To avoid over-subscription when using TBB, let the TBB schedulers use Inter Process Communication to coordinate:
+    ENABLE_IPC=1 \
+    # will cause pretty_errors to check if it is running in an interactive terminal
+    PYTHON_PRETTY_ERRORS_ISATTY_ONLY=1 \
+    # TODO: evaluate - Deactivate hdf5 file locking
+    HDF5_USE_FILE_LOCKING=False
+
+# Set default values for environment variables
+ENV CONFIG_BACKUP_ENABLED="true" \
+    SHUTDOWN_INACTIVE_KERNELS="false" \
+    SHARED_LINKS_ENABLED="true" \
+    AUTHENTICATE_VIA_JUPYTER="false" \
+    DATA_ENVIRONMENT=$WORKSPACE_HOME"/environment" \
+    WORKSPACE_BASE_URL="/" \
+    INCLUDE_TUTORIALS="true" \
+    # Main port used for sshl proxy -> can be changed
+    WORKSPACE_PORT="8080" \
+    # Set zsh as default shell (e.g. in jupyter)
+    SHELL="/usr/bin/zsh" \
+    # Fix dark blue color for ls command (unreadable):
+    # https://askubuntu.com/questions/466198/how-do-i-change-the-color-for-directories-with-ls-in-the-console
+    # USE default LS_COLORS - Dont set LS COLORS - overwritten in zshrc
+    # LS_COLORS="" \
+    # set number of threads various programs should use, if not-set, it tries to use all
+    # this can be problematic since docker restricts CPUs by stil showing all
+    MAX_NUM_THREADS="auto"
+
 ### END CONFIGURATION ###
+ARG ARG_BUILD_DATE="unknown"
+ARG ARG_VCS_REF="unknown"
+ARG ARG_WORKSPACE_VERSION="unknown"
+ENV WORKSPACE_VERSION=$ARG_WORKSPACE_VERSION
 
-# debug
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-RUN echo 'root:KKhH7V2b' | chpasswd
+# Overwrite & add Labels
+LABEL \
+    "maintainer"="mltooling.team@gmail.com" \
+    "workspace.version"=$WORKSPACE_VERSION \
+    "workspace.flavor"=$WORKSPACE_FLAVOR \
+    # Kubernetes Labels
+    "io.k8s.description"="All-in-one web-based IDE specialized for machine learning and data science." \
+    "io.k8s.display-name"="Machine Learning Workspace" \
+    "io.openshift.expose-services"="8080:http, 5901:xvnc" \
+    "io.openshift.non-scalable"="true" \
+    "io.openshift.tags"="workspace, machine learning, vnc, ubuntu, xfce" \
+    "io.openshift.min-memory"="1Gi" \
+    # Open Container labels: https://github.com/opencontainers/image-spec/blob/master/annotations.md
+    "org.opencontainers.image.title"="Machine Learning Workspace" \
+    "org.opencontainers.image.description"="All-in-one web-based IDE specialized for machine learning and data science." \
+    "org.opencontainers.image.documentation"="https://github.com/distri-group/ml-workspace" \
+    "org.opencontainers.image.url"="https://github.com/distri-group/ml-workspace" \
+    "org.opencontainers.image.source"="https://github.com/distri-group/ml-workspace" \
+    # "org.opencontainers.image.licenses"="Apache-2.0" \
+    "org.opencontainers.image.version"=$WORKSPACE_VERSION \
+    "org.opencontainers.image.vendor"="ML Tooling" \
+    "org.opencontainers.image.authors"="Hank Chen" \
+    "org.opencontainers.image.revision"=$ARG_VCS_REF \
+    "org.opencontainers.image.created"=$ARG_BUILD_DATE \
+    "org.label-schema.name"="Machine Learning Workspace" \
+    "org.label-schema.description"="All-in-one web-based IDE specialized for machine learning and data science." \
+    "org.label-schema.usage"="https://github.com/distri-group/ml-workspace" \
+    "org.label-schema.url"="https://github.com/distri-group/ml-workspace" \
+    "org.label-schema.vcs-url"="https://github.com/distri-group/ml-workspace" \
+    "org.label-schema.vendor"="ML Tooling" \
+    "org.label-schema.version"=$WORKSPACE_VERSION \
+    "org.label-schema.schema-version"="1.0" \
+    "org.label-schema.vcs-ref"=$ARG_VCS_REF \
+    "org.label-schema.build-date"=$ARG_BUILD_DATE
 
+# Removed - is run during startup since a few env variables are dynamically changed: RUN printenv > $HOME/.ssh/environment
+
+# This assures we have a volume mounted even if the user forgot to do bind mount.
+# So that they do not lose their data if they delete the container.
+# TODO: VOLUME [ "/workspace" ]
+# TODO: WORKDIR /workspace?
+
+# use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
 ENTRYPOINT ["/tini", "-g", "--"]
 
+CMD ["python", "/resources/docker-entrypoint.py"]
+
+# Port 8080 is the main access port (also includes SSH)
+# Port 5091 is the VNC port
+# Port 3389 is the RDP port
+# Port 8090 is the Jupyter Notebook Server
+# See supervisor.conf for more ports
+
+EXPOSE 8080
+###
+
+### debug: END 以上代码未验证 ###
+
 # debug
-CMD ["/usr/sbin/sshd", "-D"]
+# RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+# RUN echo 'root:KKhH7V2b' | chpasswd
+
+# ENTRYPOINT ["/tini", "-g", "--"]
+
+# # debug
+# CMD ["/usr/sbin/sshd", "-D"]
+# # CMD ["/usr/local/bin/code-server", "--port=8080", "--extensions-dir=/root/.vscode/extensions/"]

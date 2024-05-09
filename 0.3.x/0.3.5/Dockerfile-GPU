@@ -19,5 +19,11 @@ RUN \
     pip install --no-cache-dir timm==0.9.16 && \
     pip install --no-cache-dir diffusers[torch]==0.27.2 && \
     pip install --no-cache-dir datasets==2.19.0 && \
+    pip install --no-cache-dir torch-geometric==2.5.3 && \
+    pip install --no-cache-dir deepspeed==0.14.2 && \
+    pip install --no-cache-dir nni==3.0 && \
+    pip install --no-cache-dir mlflow==2.12.1 && \
+    pip install --no-cache-dir captum==0.7.0 && \
+    pip install --no-cache-dir accelerate==0.29.3 && \
     clean-layer.sh
 ### END INSTALL MACHINE LEARNING PACKAGE ###
